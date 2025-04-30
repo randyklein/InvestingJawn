@@ -22,12 +22,12 @@ def run_backtest():
     cerebro.addanalyzer(bt.analyzers.DrawDown, _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
-    log.info("Starting capital:", cerebro.broker.getvalue())
+    log.info("Starting capital: %.2f", cerebro.broker.getvalue())
     res = cerebro.run()[0]
-    log.info("Final capital:", cerebro.broker.getvalue())
-    log.info("Sharpe:", res.analyzers.sharpe.get_analysis())
-    log.info("MaxDD:", res.analyzers.dd.get_analysis()["max"]["drawdown"], "%")
-    log.info("Trades:", res.analyzers.trades.get_analysis().total)
+    log.info("Final capital: %.2f", cerebro.broker.getvalue())
+    log.info("Sharpe: %.2f", res.analyzers.sharpe.get_analysis())
+    log.info("MaxDD: %.2f", res.analyzers.dd.get_analysis()["max"]["drawdown"], "%")
+    log.info("Trades: %.2f", res.analyzers.trades.get_analysis().total)
 
 
 if __name__ == "__main__":

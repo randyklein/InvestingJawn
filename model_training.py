@@ -41,7 +41,7 @@ def prepare_dataset():
             X_parts.append(feats.loc[m, FEATURE_COLS].values)
             y_parts.append(labels[m].values)
     X, y = np.vstack(X_parts), np.concatenate(y_parts)
-    log.info("Class distribution:", Counter(y))
+    log.info("Class distribution:  %.2f", Counter(y))
     return X, y
 
 def train():
@@ -65,7 +65,7 @@ def train():
 
     log.info("\nFitting Random Forest …"); clf.fit(Xtr, ytr)
     ypred = clf.predict(Xva)
-    log.info("\nValidation accuracy:", accuracy_score(yva, ypred))
+    log.info("\nValidation accuracy: %.2f", accuracy_score(yva, ypred))
     log.info(classification_report(yva, ypred))
     os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(clf, MODEL_PATH)
