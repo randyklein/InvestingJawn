@@ -1,0 +1,10 @@
+backtrader==1.9.76.123  # pinned to satisfy alpaca‑backtrader‑api
+alpaca-trade-api==0.50.1  # pinned for alpaca-backtrader-api
+alpaca-backtrader-api==0.10
+pandas>=2.0,<3
+scikit-learn>=1.5
+joblib>=1.4
+matplotlib>=3.8
+pyarrow>=14
+tqdm>=4.66 
+lightgbm

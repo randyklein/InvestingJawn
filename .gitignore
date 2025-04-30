@@ -1,0 +1,5 @@
+/venv
+.env
+/data
+/models
+/universe/top200.csv
