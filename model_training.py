@@ -14,6 +14,9 @@ from data_ingestion import load_price_data
 from feature_engineering import compute_features
 from lightgbm import LGBMClassifier
 
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
 FEATURE_COLS = [
     "SMA_5","SMA_20","RSI_14","BB_UPPER","BB_LOWER",
     "Return_1","Return_2","Return_5",
@@ -40,19 +43,22 @@ def prepare_dataset():
 def train():
     X, y = prepare_dataset()
     Xtr, Xva, ytr, yva = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-    clf = LGBMClassifier(
-        n_estimators=600,
-        learning_rate=0.05,
-        max_depth=-1,
-        num_leaves=63,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        objective='binary',
-        is_unbalance=True,
-        n_jobs=-1,
-        random_state=42,
-        verbose=-1,
+    clf = make_pipeline(
+        StandardScaler(),          # z-scores each feature column
+        LGBMClassifier(
+            n_estimators=600,
+            learning_rate=0.05,
+            num_leaves=63,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            objective="binary",
+            is_unbalance=True,
+            n_jobs=-1,
+            random_state=42,
+            verbose=-1,
+        ),
     )
+
     print("\nFitting Random Forest …"); clf.fit(Xtr, ytr)
     ypred = clf.predict(Xva)
     print("\nValidation accuracy:", accuracy_score(yva, ypred))
