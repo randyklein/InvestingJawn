@@ -166,13 +166,13 @@ class MLProbabilisticStrategy(bt.Strategy):
             if self._sector_ok(d._name, True):
                 self.order_target_percent(d, target_pct)
                 if self.getposition(d).size == 0:
-                    self.sell(d, exectype=bt.Order.StopTrail, trailpercent=0.05)
+                    self.sell(d, exectype=bt.Order.StopTrail, trailpercent=0.03)
 
         for d, atr in shorts:
             if self._sector_ok(d._name, False):
                 self.order_target_percent(d, -target_pct)
                 if self.getposition(d).size == 0:
-                    self.buy(d,  exectype=bt.Order.StopTrail, trailpercent=0.05)
+                    self.buy(d,  exectype=bt.Order.StopTrail, trailpercent=0.03)
 
 
 # Backward-compat alias for backtesting.py
