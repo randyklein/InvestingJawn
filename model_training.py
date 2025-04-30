@@ -17,6 +17,10 @@ from lightgbm import LGBMClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
+from logger_setup import get_logger
+log = get_logger(__name__)
+
+
 FEATURE_COLS = [
     "SMA_5","SMA_20","RSI_14","BB_UPPER","BB_LOWER",
     "Return_1","Return_2","Return_5",
@@ -37,7 +41,7 @@ def prepare_dataset():
             X_parts.append(feats.loc[m, FEATURE_COLS].values)
             y_parts.append(labels[m].values)
     X, y = np.vstack(X_parts), np.concatenate(y_parts)
-    print("Class distribution:", Counter(y))
+    log.info("Class distribution:", Counter(y))
     return X, y
 
 def train():
@@ -59,13 +63,13 @@ def train():
         ),
     )
 
-    print("\nFitting Random Forest …"); clf.fit(Xtr, ytr)
+    log.info("\nFitting Random Forest …"); clf.fit(Xtr, ytr)
     ypred = clf.predict(Xva)
-    print("\nValidation accuracy:", accuracy_score(yva, ypred))
-    print(classification_report(yva, ypred))
+    log.info("\nValidation accuracy:", accuracy_score(yva, ypred))
+    log.info(classification_report(yva, ypred))
     os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(clf, MODEL_PATH)
-    print(f"Model saved ➜ {MODEL_PATH}")
+    log.info(f"Model saved ➜ {MODEL_PATH}")
 
 if __name__ == "__main__":
     train()

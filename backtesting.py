@@ -4,6 +4,9 @@ from data_ingestion import load_price_data
 from strategy import MLProbabilisticStrategy as MLTradingStrategy
 from config import INITIAL_CASH
 
+from logger_setup import get_logger
+log = get_logger(__name__)
+
 
 def run_backtest():
     cerebro = bt.Cerebro()
@@ -19,12 +22,12 @@ def run_backtest():
     cerebro.addanalyzer(bt.analyzers.DrawDown, _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
-    print("Starting capital:", cerebro.broker.getvalue())
+    log.info("Starting capital:", cerebro.broker.getvalue())
     res = cerebro.run()[0]
-    print("Final capital:", cerebro.broker.getvalue())
-    print("Sharpe:", res.analyzers.sharpe.get_analysis())
-    print("MaxDD:", res.analyzers.dd.get_analysis()["max"]["drawdown"], "%")
-    print("Trades:", res.analyzers.trades.get_analysis().total)
+    log.info("Final capital:", cerebro.broker.getvalue())
+    log.info("Sharpe:", res.analyzers.sharpe.get_analysis())
+    log.info("MaxDD:", res.analyzers.dd.get_analysis()["max"]["drawdown"], "%")
+    log.info("Trades:", res.analyzers.trades.get_analysis().total)
 
 
 if __name__ == "__main__":
