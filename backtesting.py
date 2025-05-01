@@ -1,39 +1,90 @@
-"""Run the full backtest and print high‑level stats."""
-import backtrader as bt
-from data_ingestion import load_price_data
-from strategy import MLProbabilisticStrategy as MLTradingStrategy
-from config import INITIAL_CASH
+"""Run one back-test of the ML strategy (callable).
 
+Use run_once() programmatically or execute the file directly for
+a single default run.
+
+Example short-window test:
+    python backtesting.py  # default full-period
+Or from code:
+    from backtesting import run_once
+    res = run_once(start_date="2025-01-02", end_date="2025-03-31",
+                   p_long=0.58, p_short=0.42, max_long_short=10)
+"""
+
+from datetime import datetime as _dt
+from typing import Optional, Dict, Any
+
+import backtrader as bt
 from logger_setup import get_logger
+
+from config import INITIAL_CASH
+from data_ingestion import load_price_data
+from strategy import MLTradingStrategy
+
 log = get_logger(__name__)
 
 
-def run_backtest():
+def run_once(
+    *,
+    p_long: float = 0.58,
+    p_short: float = 0.42,
+    max_long_short: int = 10,
+    trail_percent: float = 0.05,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run a single back-test with the given parameters."""
     cerebro = bt.Cerebro()
     cerebro.broker.setcash(INITIAL_CASH)
+    cerebro.broker.setcommission(leverage=1.0)  # cash-only
 
-    cerebro.broker.setcommission(leverage=1.0)   # disable margin/over-shorting
-    
+    # date window
+    fd = _dt.fromisoformat(start_date).date() if start_date else None
+    td = _dt.fromisoformat(end_date).date() if end_date else None
+
+    # data feeds
     for tkr, df in load_price_data().items():
-        cerebro.adddata(bt.feeds.PandasData(dataname=df, name=tkr))
+        if fd or td:
+            df = df.loc[fd:td]
+        cerebro.adddata(
+            bt.feeds.PandasData(
+                dataname=df,
+                name=tkr,
+                fromdate=fd,
+                todate=td,
+            )
+        )
 
-    cerebro.addstrategy(MLTradingStrategy)
+    # strategy
+    cerebro.addstrategy(
+        MLTradingStrategy,
+        p_long=p_long,
+        p_short=p_short,
+        max_long_short=max_long_short,
+        trail_percent=trail_percent,
+    )
+
+    # analyzers
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
-    cerebro.addanalyzer(bt.analyzers.DrawDown, _name="dd")
+    cerebro.addanalyzer(bt.analyzers.DrawDown,   _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
-    log.info("Starting capital: %.2f", cerebro.broker.getvalue())
-    res = cerebro.run()[0]
-    final_cap = cerebro.broker.getvalue()
-    sharpe    = strat.analyzers.sharpe.get_analysis().get('sharperatio', float('nan'))
-    dd        = strat.analyzers.dd.get_analysis()['max']['drawdown']
-    trades    = strat.analyzers.trades.get_analysis()
+    strat = cerebro.run()[0]
 
-    log.info("Final capital: %.2f", final_cap)
-    log.info("Sharpe ratio : %.3f", sharpe)
-    log.info("Max draw-down: %.2f%%", dd)
-    log.info("Trades closed: %d", trades.total)
+    results = dict(
+        final=cerebro.broker.getvalue(),
+        sharpe=strat.analyzers.sharpe.get_analysis().get("sharperatio", float("nan")),
+        mdd=strat.analyzers.dd.get_analysis()["max"]["drawdown"],
+        trades=strat.analyzers.trades.get_analysis().total,
+    )
+    log.info(
+        "Run p_long=%.2f p_short=%.2f maxLS=%d trail=%.2f %%  "
+        "→  Final %.2f  Sharpe %.3f  MaxDD %.2f%%  Trades %d",
+        p_long, p_short, max_long_short, trail_percent * 100,
+        results["final"], results["sharpe"], results["mdd"], results["trades"]
+    )
+    return results
 
 
 if __name__ == "__main__":
-    run_backtest()
+    run_once()   # full-period default
