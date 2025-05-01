@@ -59,6 +59,8 @@ def train():
         n_jobs=-1,
         random_state=42,
         verbose=-1,
+        force_col_wise=True,         # ← better for wide data
+        reuse_hist=True,             # ← reduces memory use + faster
     )
     clf.fit(X_tr, y_tr)
 
