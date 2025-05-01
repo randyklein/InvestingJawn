@@ -24,10 +24,15 @@ def run_backtest():
 
     log.info("Starting capital: %.2f", cerebro.broker.getvalue())
     res = cerebro.run()[0]
-    log.info("Final capital: %.2f", cerebro.broker.getvalue())
-    log.info("Sharpe: %.2f", res.analyzers.sharpe.get_analysis())
-    log.info("MaxDD: %.2f", res.analyzers.dd.get_analysis()["max"]["drawdown"], "%")
-    log.info("Trades: %.2f", res.analyzers.trades.get_analysis().total)
+    final_cap = cerebro.broker.getvalue()
+    sharpe    = strat.analyzers.sharpe.get_analysis().get('sharperatio', float('nan'))
+    dd        = strat.analyzers.dd.get_analysis()['max']['drawdown']
+    trades    = strat.analyzers.trades.get_analysis()
+
+    log.info("Final capital: %.2f", final_cap)
+    log.info("Sharpe ratio : %.3f", sharpe)
+    log.info("Max draw-down: %.2f%%", dd)
+    log.info("Trades closed: %d", trades.total)
 
 
 if __name__ == "__main__":
