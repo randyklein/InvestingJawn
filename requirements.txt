@@ -8,3 +8,4 @@ matplotlib>=3.8
 pyarrow>=14
 tqdm>=4.66 
 lightgbm
+joblib>=1.3
