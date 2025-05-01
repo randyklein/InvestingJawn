@@ -34,7 +34,7 @@ def run_cfg(cfg):
         return {**cfg, "final": None, "sharpe": None, "mdd": None, "trades": None}
 
 # --- parallel run
-results = Parallel(n_jobs=-1, backend="loky")(delayed(run_cfg)(cfg) for cfg in grid)
+results = Parallel(n_jobs=12, backend="threading")(delayed(run_cfg)(cfg) for cfg in grid)
 
 # --- write to CSV
 Path("logs").mkdir(exist_ok=True)

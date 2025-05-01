@@ -1,4 +1,4 @@
-"""LightGBM probability-ranked intraday strategy (fixed 5 % stop)."""
+"""LightGBM probability-ranked intraday strategy with safe entry & trailing-stop logic."""
 
 from __future__ import annotations
 import math
@@ -50,28 +50,62 @@ class MLProbabilisticStrategy(bt.Strategy):
     ]
 
     def __init__(self):
+        # load trained model
         self.model = joblib.load(MODEL_PATH)
+        # setup indicators per data feed
         self.ind_map: Dict[bt.DataBase, _Indicators] = {
             d: _Indicators(d) for d in self.datas
         }
+        # track orders to avoid double-stops
+        self.entry_orders: Dict[bt.DataBase, bt.Order] = {}
+        self.stop_orders: Dict[bt.DataBase, bt.Order] = {}
+
+    def notify_order(self, order: bt.Order):
+        # only act on completed entry orders
+        if order.status != order.Completed:
+            return
+
+        data = order.data
+        # if this was our entry order, place its stop-trail once
+        if self.entry_orders.get(data) is order:
+            trail = self.p.trail_percent
+            if order.size > 0:
+                stop = self.sell(
+                    data,
+                    exectype=bt.Order.StopTrail,
+                    trailpercent=trail,
+                    parent=order,
+                )
+            else:
+                stop = self.buy(
+                    data,
+                    exectype=bt.Order.StopTrail,
+                    trailpercent=trail,
+                    parent=order,
+                )
+            self.stop_orders[data] = stop
+            # clear entry so we don't reattach
+            del self.entry_orders[data]
 
     def next(self):
+        # need warm-up bars for indicators
         if len(self) < self.p.min_bars:
             return
 
+        # score each feed
         scores = []
         for d in self.datas:
             ind = self.ind_map[d]
             ts = d.datetime.datetime(0)
-            minutes = ts.hour * 60 + ts.minute
-            tod_sin = math.sin(2 * math.pi * minutes / 1440)
-            tod_cos = math.cos(2 * math.pi * minutes / 1440)
+            mins = ts.hour * 60 + ts.minute
+            tod_sin = math.sin(2 * math.pi * mins / 1440)
+            tod_cos = math.cos(2 * math.pi * mins / 1440)
 
             # 20-bar VWAP gap
             if len(d) >= 20:
-                pv_sum = sum(d.close[-i] * d.volume[-i] for i in range(20))
-                vol_sum = sum(d.volume[-i] for i in range(20))
-                vwap_gap = d.close[0] / (pv_sum / vol_sum) - 1 if vol_sum else np.nan
+                pv = sum(d.close[-i] * d.volume[-i] for i in range(20))
+                vol = sum(d.volume[-i] for i in range(20))
+                vwap_gap = d.close[0] / (pv / vol) - 1 if vol else np.nan
             else:
                 vwap_gap = np.nan
 
@@ -85,25 +119,30 @@ class MLProbabilisticStrategy(bt.Strategy):
             if np.isnan(feats).any():
                 continue
 
-            proba = self.model.predict_proba(
+            p_up = self.model.predict_proba(
                 pd.DataFrame([feats], columns=self.FEATURE_COLS)
             )[0, 1]
-            scores.append((d, proba))
+            scores.append((d, p_up))
 
-        longs = [d for d, p in sorted(scores, key=lambda x: -x[1])
-                 if p >= self.p.p_long][: self.p.max_long_short]
-        shorts = [d for d, p in sorted(scores, key=lambda x:  x[1])
-                  if p <= self.p.p_short][: self.p.max_long_short]
+        # select long/short lists
+        longs = [
+            d for d, p in sorted(scores, key=lambda x: -x[1])
+            if p >= self.p.p_long
+        ][: self.p.max_long_short]
+        shorts = [
+            d for d, p in sorted(scores, key=lambda x: x[1])
+            if p <= self.p.p_short
+        ][: self.p.max_long_short]
 
         if not longs and not shorts:
             return
 
-        target_pct = min(
-            MAX_POSITION_PCT,
-            (1 - CASH_BUFFER_PCT) / (len(longs) + len(shorts)),
-        )
+        # calculate target percent per symbol, capped at MAX_POSITION_PCT & 20%
+        max_sym = 0.20
+        base_pct = (1 - CASH_BUFFER_PCT) / max(1, len(longs) + len(shorts))
+        target_pct = min(MAX_POSITION_PCT, max_sym, base_pct)
 
-        # Close stale
+        # close stale positions
         for d in self.datas:
             pos = self.getposition(d).size
             if pos > 0 and d not in longs:
@@ -111,19 +150,16 @@ class MLProbabilisticStrategy(bt.Strategy):
             elif pos < 0 and d not in shorts:
                 self.close(d)
 
-        # Open / rebalance
+        # enter longs
         for d in longs:
-            self.order_target_percent(d, target_pct)
-            if self.getposition(d).size == 0:
-                self.sell(d, exectype=bt.Order.StopTrail,
-                          trailpercent=self.p.trail_percent)
+            order = self.order_target_percent(d, target_pct)
+            self.entry_orders[d] = order
 
+        # enter shorts
         for d in shorts:
-            self.order_target_percent(d, -target_pct)
-            if self.getposition(d).size == 0:
-                self.buy(d, exectype=bt.Order.StopTrail,
-                         trailpercent=self.p.trail_percent)
+            order = self.order_target_percent(d, -target_pct)
+            self.entry_orders[d] = order
 
 
-# alias for older import
+# alias for backward compatibility
 MLTradingStrategy = MLProbabilisticStrategy
