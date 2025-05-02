@@ -1,7 +1,3 @@
-# High School investment project
-
-This is a high-school programming project and does not actually work.  The investments lose money.  This should not be used to make any trades.  
-
 ---
 ## 1  Setup
 ```bash
