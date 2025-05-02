@@ -15,6 +15,7 @@ from logger_setup import get_logger
 from config import INITIAL_CASH
 from data_ingestion import load_price_data
 from strategy import MLTradingStrategy
+from tax_analyzer import TaxAnalyzer
 
 log = get_logger(__name__)
 
@@ -32,6 +33,8 @@ def run_once(
     cerebro = bt.Cerebro()
     cerebro.broker.setcash(INITIAL_CASH)
     cerebro.broker.setcommission(leverage=1.0)  # cash-only
+
+    cerebro.addanalyzer(TaxAnalyzer, _name="tax", rate=0.24)
 
     # ── NEW: 0.02 % slippage each way (≈ 0.04 % round-trip) ──
     cerebro.broker.set_slippage_perc(
@@ -98,6 +101,9 @@ def run_once(
     tradesA = strat.analyzers.trades.get_analysis()
     closed  = tradesA["total"]["closed"] if "total" in tradesA else 0
 
+    # NEW — tax analyzer results
+    tax = strat.analyzers.tax.get_analysis()   # {'gross_pnl': …, 'tax_paid': …, 'net_after_tax': …}
+
     # CAGR (only if window ≥ 30 days and equity positive)
     window_days = (td - fd).days if fd and td else 0
     if final > 0 and window_days >= 30:
@@ -108,6 +114,8 @@ def run_once(
 
     results = dict(final=final, sharpe=sharpe, mdd=mdd,
                    trades=closed, cagr=cagr)
+    
+    results.update(tax)        # ← merge the three tax keys into results
 
     log.info(
         "Run p_long=%.2f p_short=%.2f maxLS=%d trail=%.2f%%  →  "
