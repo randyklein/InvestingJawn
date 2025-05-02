@@ -11,10 +11,10 @@ log = get_logger(__name__)
 
 # --- parameter grid -------------------------------------------------
 param_grid = {
-    "p_long":          [0.56, 0.58, 0.60],
-    "p_short":         [0.44, 0.42, 0.40],
-    "max_long_short":  [6, 8, 10],
-    "trail_percent":   [0.04, 0.05],
+    "p_long":          [0.54, 0.55, 0.57],
+    "p_short":         [0.42],
+    "max_long_short":  [10],
+    "trail_percent":   [0.04],
 }
 
 # short evaluation window for speed

@@ -33,6 +33,13 @@ def run_once(
     cerebro.broker.setcash(INITIAL_CASH)
     cerebro.broker.setcommission(leverage=1.0)  # cash-only
 
+    # ── NEW: 0.02 % slippage each way (≈ 0.04 % round-trip) ──
+    cerebro.broker.set_slippage_perc(
+        perc=0.0002,        # 0.02 %
+        slip_open=True,     # apply on entry
+        slip_match=True     # and on exit/stop
+)
+
     # forbid entering new shorts when cash is negative
     cerebro.broker.set_shortcash(False)
 
