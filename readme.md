@@ -1,6 +1,6 @@
-# Machine‑Learning Stock Trading Bot
+# High School investment project
 
-A fully‑automated long/short equities strategy using a Random‑Forest classifier, Backtrader for execution/backtesting, and Alpaca for live trading.
+This is a high-school programming project and does not actually work.  The investments lose money.  This should not be used to make any trades.  
 
 ---
 ## 1  Setup

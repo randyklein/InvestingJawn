@@ -16,8 +16,8 @@ param_grid = {
     "max_long_short":  [6, 8, 10],
     "trail_percent":   [0.04, 0.05],
 }
-WIN_START = "2025-01-02"
-WIN_END   = "2025-03-31"
+WIN_START = "2023-01-01"
+WIN_END   = "2024-12-31"
 
 # --- flatten grid
 keys = list(param_grid.keys())
