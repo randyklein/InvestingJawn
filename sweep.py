@@ -8,16 +8,20 @@ from pathlib import Path
 import csv
 from logger_setup import get_logger
 from backtesting import run_once
+import pandas as pd
 
 log = get_logger(__name__)
+
+top50 = pd.read_csv("universe/top50.csv")["symbol"].tolist()
 
 # ─── parameter grid ───────────────────────────────────────────────
 param_grid = {
     "p_long":          [0.56, 0.58],
     "p_short":         [0.42],              # keep best so far
-    "max_long_short":  [6, 8],
+    "max_long_short":  [4, 6],
     "trail_percent":   [0.04],
-    "min_edge":        [0.001],    # slippage buffer test
+    "min_edge":        [0.001, 0.0015],    # slippage buffer test
+    "trade_shorts":  [False],
 }
 
 # date window you want to evaluate

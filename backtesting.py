@@ -16,6 +16,8 @@ from config import INITIAL_CASH, MIN_EDGE
 from data_ingestion import load_price_data
 from strategy import MLTradingStrategy
 from tax_analyzer import TaxAnalyzer
+import argparse
+from typing import Optional, List
 
 log = get_logger(__name__)
 
@@ -29,6 +31,8 @@ def run_once(
     min_edge=MIN_EDGE,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    tickers:    Optional[List[str]] = None,  
+
 ) -> Dict[str, Any]:
     """Run a single back-test with the given parameters."""
     cerebro = bt.Cerebro()
@@ -49,6 +53,8 @@ def run_once(
     td = _dt.fromisoformat(end_date).date()   if end_date   else None
 
     # ─────────────────── add data feeds ────────────────────────────
+    price_data = load_price_data(tickers)   # pass None or your subset here
+    
     for tkr, df in load_price_data().items():
         # 1. drop timezone
         if getattr(df.index, "tz", None) is not None:
@@ -137,4 +143,14 @@ def run_once(
 
 
 if __name__ == "__main__":
-    run_once()      # full-period default
+    p = argparse.ArgumentParser(description="Run one backtest")
+    p.add_argument("--start",  help="YYYY-MM-DD")
+    p.add_argument("--end",    help="YYYY-MM-DD")
+    p.add_argument("--tickers",nargs="+",
+                   help="List of tickers to include (default=all)")
+    args = p.parse_args()
+    run_once(
+      start_date = args.start,
+      end_date   = args.end,
+      tickers    = args.tickers,
+    )
