@@ -11,7 +11,7 @@ PROCESSED_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "processed")  # pre‑ag
 DATA_DIR = RAW_DATA_DIR
 
 # Minutes per bar when resampling minute data.  None → aggregate to daily.
-RESAMPLE_MINUTES = 15
+RESAMPLE_MINUTES = 30
 
 # ─── Strategy / risk parameters ─────────────────────────────────────
 INITIAL_CASH = 10_000.0

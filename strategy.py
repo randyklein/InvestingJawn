@@ -63,16 +63,21 @@ class MLProbabilisticStrategy(bt.Strategy):
 
     # ---- attach one trailing stop after fill ---------------------
     def notify_order(self, order: bt.Order):
-        if order.status != order.Completed:
-            return
-        d = order.data
-        if self.entry_orders.get(d) is order:
-            tp = self.p.trail_percent
-            stop = (self.sell if order.size > 0 else self.buy)(
-                d, exectype=bt.Order.StopTrail,
-                trailpercent=tp, parent=order)
-            self.stop_orders[d] = stop
-            del self.entry_orders[d]
+
+        #temporarily do nothing while trailing stop is commented out
+        return
+
+        #commenting out trailing stop
+        # if order.status != order.Completed:
+        #     return
+        # d = order.data
+        # if self.entry_orders.get(d) is order:
+        #     tp = self.p.trail_percent
+        #     stop = (self.sell if order.size > 0 else self.buy)(
+        #         d, exectype=bt.Order.StopTrail,
+        #         trailpercent=tp, parent=order)
+        #     self.stop_orders[d] = stop
+        #     del self.entry_orders[d]
 
     # ---- main step ----------------------------------------------
     def next(self):

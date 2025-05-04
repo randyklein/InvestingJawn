@@ -13,11 +13,11 @@ log = get_logger(__name__)
 
 # ─── parameter grid ───────────────────────────────────────────────
 param_grid = {
-    "p_long":          [0.54, 0.56, 0.58, 0.60],
+    "p_long":          [0.56, 0.58],
     "p_short":         [0.42],              # keep best so far
-    "max_long_short":  [6, 8, 10],
-    "trail_percent":   [0.03, 0.04],
-    "min_edge":        [0.0005, 0.0010],    # slippage buffer test
+    "max_long_short":  [6, 8],
+    "trail_percent":   [0.04],
+    "min_edge":        [0.001],    # slippage buffer test
 }
 
 # date window you want to evaluate
