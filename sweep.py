@@ -1,26 +1,29 @@
-import csv
+"""
+Memory-safe multiprocess parameter sweep
+---------------------------------------
+Example:
+    python sweep.py --workers 4 --universes top200 top100 top50
+"""
+
+import csv, argparse, time
 from itertools import product
 from pathlib import Path
+from multiprocessing import Process, Queue
 import pandas as pd
 from logger_setup import get_logger
-from backtesting import run_once
+from utils.sweep_worker import worker    # <== new helper
 
 log = get_logger(__name__)
 
-# ─── prepare ticker‐set mapping ───────────────────────────────────
+# ---- ticker CSV mapping -------------------------------------------------
 ticker_files = {
     "top200": "universe/top200.csv",
-    #"top100": "universe/top100.csv",
-    #"top50":  "universe/top50.csv",
-}
-ticker_sets = {
-    name: pd.read_csv(path)["symbol"].tolist()
-    for name, path in ticker_files.items()
+    "top100": "universe/top100.csv",
+    "top50":  "universe/top50.csv",
 }
 
-# ─── param grid (universe included) ──────────────────────────────
+# ---- grid to test -------------------------------------------------------
 param_grid = {
-    "universe":        list(ticker_sets.keys()),  
     "p_long":          [0.60, 0.62, 0.64],
     "p_short":         [0.42],
     "max_long_short":  [4, 6],
@@ -29,46 +32,65 @@ param_grid = {
     "trade_shorts":    [False],
 }
 
-# ─── evaluation window ────────────────────────────────────────────
 WIN_START = "2023-01-03"
 WIN_END   = "2024-12-31"
+CSV_PATH  = Path("logs/experiment_results_full.csv")
 
-# ─── generate all combos ──────────────────────────────────────────
-keys = list(param_grid.keys())
-all_cfgs = [
-    dict(zip(keys, vals))
-    for vals in product(*(param_grid[k] for k in keys))
-]
+# ------------------------------------------------------------------------
+def build_tasks():
+    keys = list(param_grid.keys())
+    for vals in product(*(param_grid[k] for k in keys)):
+        cfg = dict(zip(keys, vals))
+        cfg["_start"] = WIN_START      # embed date window in cfg
+        cfg["_end"]   = WIN_END
+        yield cfg
 
-# ─── run sweep ────────────────────────────────────────────────────
-results = []
-for cfg in all_cfgs:
-    universe_name = cfg.pop("universe")
-    tickers = ticker_sets[universe_name]
-    log.info("Running %s on %s", cfg, universe_name)
-    try:
-        out = run_once(
-            **cfg,
-            start_date=WIN_START,
-            end_date=WIN_END,
-            tickers=tickers,
-        )
-    except Exception as e:
-        log.error("✗ Failed %s on %s: %s", cfg, universe_name, e)
-        out = dict(final=None, sharpe=None, mdd=None,
-                   trades=None, cagr=None,
-                   gross_pnl=None, tax_paid=None,
-                   net_after_tax=None)
-    row = {"universe": universe_name, **cfg, **out}
-    results.append(row)
-    log.info("Result %s", row)
+def main(universes, n_workers):
+    task_q, result_q = Queue(), Queue()
 
-# ─── save CSV ─────────────────────────────────────────────────────
-Path("logs").mkdir(exist_ok=True)
-out_path = Path("logs/experiment_results_full.csv")
-with out_path.open("w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=results[0].keys())
-    writer.writeheader()
-    writer.writerows(results)
+    # enqueue ALL configs for each universe
+    for u in universes:
+        for cfg in build_tasks():
+            task_q.put(cfg)
+        task_q.put(None)     # poison pill for that worker
 
-log.info("✅ Saved combined sweep results → %s", out_path)
+    # start one worker per universe (bounded by --workers)
+    procs = []
+    for u in universes[:n_workers]:
+        p = Process(target=worker,
+                    args=(u, ticker_files[u], task_q, result_q),
+                    daemon=True)
+        p.start()
+        procs.append(p)
+
+    # incremental CSV write
+    CSV_PATH.parent.mkdir(exist_ok=True)
+    wrote_header = False
+    finished = 0
+    total_tasks = len(universes)*len(list(build_tasks()))
+    with CSV_PATH.open("w", newline="") as f:
+        writer = None
+        while finished < total_tasks:
+            res = result_q.get()
+            if writer is None:
+                writer = csv.DictWriter(f, fieldnames=res.keys())
+                writer.writeheader()
+                wrote_header = True
+            writer.writerow(res); f.flush()
+            finished += 1
+            if finished % 10 == 0:
+                log.info("%d / %d done (%0.1f%%)",
+                         finished, total_tasks,
+                         100*finished/total_tasks)
+
+    for p in procs:
+        p.join()
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workers", type=int, default=4,
+                    help="Max parallel universes")
+    ap.add_argument("--universes", nargs="+",
+                    default=list(ticker_files.keys()))
+    args = ap.parse_args()
+    main(args.universes, args.workers)

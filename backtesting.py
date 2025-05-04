@@ -19,6 +19,7 @@ from tax_analyzer import TaxAnalyzer
 import argparse
 from typing import Optional, List
 
+
 log = get_logger(__name__)
 
 
@@ -36,6 +37,17 @@ def run_once(
 
 ) -> Dict[str, Any]:
     """Run a single back-test with the given parameters."""
+
+    # ─── gather hyperparams for dynamic logging ────────────────────
+    _sig = inspect.signature(run_once)
+    # use parameter names except those we override
+    _hp_names = [
+        p for p in _sig.parameters
+        if p not in ("start_date","end_date","tickers")
+    ]
+    # build dict of their current values
+    _hp = {name: locals()[name] for name in _hp_names}
+
     cerebro = bt.Cerebro()
     cerebro.broker.setcash(INITIAL_CASH)
     cerebro.broker.setcommission(leverage=1.0)  # cash-only
@@ -131,16 +143,20 @@ def run_once(
     
     results.update(tax)        # ← merge the three tax keys into results
 
+    # Compose a single formatted string of all hyperparams
+    hp_str = " ".join(f"{k}={v!r}" for k, v in _hp.items())
     log.info(
-        "Run [%s → %s] p_long=%.2f p_short=%.2f maxLS=%d trail=%.2f%%  →  "
+        "Run [%s → %s] %s  →  "
         "Final %.2f  CAGR %s  Sharpe %s  MaxDD %.2f%%  Trades %d",
         fd or "BEGIN", td or "END",
-        p_long, p_short, max_long_short, trail_percent * 100,
+        hp_str,
         final,
-        f"{cagr:.2%}" if cagr is not None else "nan",
-        f"{sharpe:.3f}" if sharpe is not None else "nan",
-        mdd, closed
+        f"{cagr:.2%}"        if cagr    is not None else "nan",
+        f"{sharpe:.3f}"      if sharpe  is not None else "nan",
+        mdd,
+        closed,
     )
+
     return results
 
 
