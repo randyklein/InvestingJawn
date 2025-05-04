@@ -11,7 +11,7 @@ log = get_logger(__name__)
 
 # --- parameter grid -------------------------------------------------
 param_grid = {
-    "p_long":          [0.54, 0.55, 0.57],
+    "p_long":          [0.56],
     "p_short":         [0.42],
     "max_long_short":  [10],
     "trail_percent":   [0.04],

@@ -15,10 +15,11 @@ RESAMPLE_MINUTES = 15
 
 # ─── Strategy / risk parameters ─────────────────────────────────────
 INITIAL_CASH = 10_000.0
-MAX_POSITION_PCT = 0.10
+MAX_POSITION_PCT = 0.20
 CASH_BUFFER_PCT = 0.05
 MAX_SECTOR_POSITIONS = 3
 TRAIL_PERCENT = 0.05
+MIN_EDGE = 0.0005        # minimum probability edge (50.05%) to cover slippage
 
 # ─── Model output path ─────────────────────────────────────────────
 MODEL_DIR = os.path.join(PROJECT_ROOT, "models")

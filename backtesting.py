@@ -36,12 +36,9 @@ def run_once(
 
     cerebro.addanalyzer(TaxAnalyzer, _name="tax", rate=0.24)
 
-    # ── NEW: 0.02 % slippage each way (≈ 0.04 % round-trip) ──
-    cerebro.broker.set_slippage_perc(
-        perc=0.0002,        # 0.02 %
-        slip_open=True,     # apply on entry
-        slip_match=True     # and on exit/stop
-)
+    #slippage
+    cerebro.broker.set_slippage_perc(perc=0.0002, slip_open=True, slip_match=True)
+    cerebro.broker.set_shortcash(False)
 
     # forbid entering new shorts when cash is negative
     cerebro.broker.set_shortcash(False)
@@ -92,6 +89,13 @@ def run_once(
     cerebro.addanalyzer(bt.analyzers.DrawDown,   _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
+    if len(cerebro.datas) == 0:
+        log.warning("No feeds for %s → %s — skipped.", start_date, end_date)
+        return dict(start=fd, end=td, final=None, sharpe=None, mdd=None,
+                    trades=0, cagr=None, gross_pnl=None, tax_paid=None,
+                    net_after_tax=None)
+
+
     strat = cerebro.run()[0]
 
     # ─────────────────── results ───────────────────────────────────
@@ -112,14 +116,15 @@ def run_once(
     else:
         cagr = None
 
-    results = dict(final=final, sharpe=sharpe, mdd=mdd,
+    results = dict(start=fd or "FULL", end=td or "FULL",final=final, sharpe=sharpe, mdd=mdd,
                    trades=closed, cagr=cagr)
     
     results.update(tax)        # ← merge the three tax keys into results
 
     log.info(
-        "Run p_long=%.2f p_short=%.2f maxLS=%d trail=%.2f%%  →  "
+        "Run [%s → %s] p_long=%.2f p_short=%.2f maxLS=%d trail=%.2f%%  →  "
         "Final %.2f  CAGR %s  Sharpe %s  MaxDD %.2f%%  Trades %d",
+        fd or "BEGIN", td or "END",
         p_long, p_short, max_long_short, trail_percent * 100,
         final,
         f"{cagr:.2%}" if cagr is not None else "nan",
