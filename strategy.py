@@ -46,6 +46,7 @@ class MLProbabilisticStrategy(bt.Strategy):
         p_short=0.42,
         max_long_short=10,
         trail_percent=0.04,
+        min_edge=MIN_EDGE,
     )
 
     FEATURE_COLS: List[str] = [
@@ -107,10 +108,10 @@ class MLProbabilisticStrategy(bt.Strategy):
                 pd.DataFrame([feats], columns=self.FEATURE_COLS))[0, 1]
             scores.append((d, p_up))
 
-        longs  = [d for d, p in scores
-                  if p >= self.p.p_long  and (p - 0.5) >= MIN_EDGE]
-        shorts = [d for d, p in scores
-                  if p <= self.p.p_short and (0.5 - p) >= MIN_EDGE]
+        longs  = [d for d,p in scores
+                  if p >= self.p.p_long  and (p - 0.5) >= self.p.min_edge]
+        shorts = [d for d,p in scores
+                  if p <= self.p.p_short and (0.5 - p) >= self.p.min_edge]
 
         longs  = sorted(longs,  key=lambda d: -dict(scores)[d])[: self.p.max_long_short]
         shorts = sorted(shorts, key=lambda d:  dict(scores)[d])[: self.p.max_long_short]

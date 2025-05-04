@@ -1,47 +1,46 @@
-# sweep.py
-import csv
+"""
+Parameter sweep – slippage-aware.
+Results (including net-after-tax) are written to logs/experiment_results.csv
+"""
+
 from itertools import product
 from pathlib import Path
-from joblib import Parallel, delayed
+import csv
 from logger_setup import get_logger
-
 from backtesting import run_once
 
 log = get_logger(__name__)
 
-# --- parameter grid -------------------------------------------------
+# ─── parameter grid ───────────────────────────────────────────────
 param_grid = {
-    "p_long":          [0.56, 0.58, 0.60],
-    "p_short":         [0.44, 0.42, 0.40],
+    "p_long":          [0.54, 0.56, 0.58, 0.60],
+    "p_short":         [0.42],              # keep best so far
     "max_long_short":  [6, 8, 10],
-    "trail_percent":   [0.04, 0.05],
+    "trail_percent":   [0.03, 0.04],
+    "min_edge":        [0.0005, 0.0010],    # slippage buffer test
 }
-WIN_START = "2023-01-01"
+
+# date window you want to evaluate
+WIN_START = "2023-01-03"
 WIN_END   = "2024-12-31"
 
-# --- flatten grid
+# ─── run grid sequentially (simple & RAM-friendly) ───────────────
 keys = list(param_grid.keys())
-grid = [dict(zip(keys, values)) for values in product(*(param_grid[k] for k in keys))]
+results = []
 
-# --- wrapper for parallel call
-def run_cfg(cfg):
-    try:
-        res = run_once(**cfg, start_date=WIN_START, end_date=WIN_END)
-        log.info("✓ Finished %s", cfg)
-        return {**cfg, **res}
-    except Exception as e:
-        log.error("✗ Failed %s: %s", cfg, str(e))
-        return {**cfg, "final": None, "sharpe": None, "mdd": None, "trades": None}
+for vals in product(*(param_grid[k] for k in keys)):
+    cfg = dict(zip(keys, vals))
+    log.info("Running %s", cfg)
+    res = run_once(**cfg, start_date=WIN_START, end_date=WIN_END)
+    results.append({**cfg, **res})
+    log.info("Result %s", res)
 
-# --- parallel run
-results = Parallel(n_jobs=12, backend="threading")(delayed(run_cfg)(cfg) for cfg in grid)
-
-# --- write to CSV
+# ─── save CSV ─────────────────────────────────────────────────────
 Path("logs").mkdir(exist_ok=True)
-out_path = Path("logs/experiment_results_parallel.csv")
+out_path = Path("logs/experiment_results.csv")
 with out_path.open("w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=results[0].keys())
     writer.writeheader()
     writer.writerows(results)
 
-log.info("✅ Saved parallel results to %s", out_path)
+log.info("Saved sweep results → %s", out_path)

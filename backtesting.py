@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 import backtrader as bt
 from logger_setup import get_logger
 
-from config import INITIAL_CASH
+from config import INITIAL_CASH, MIN_EDGE
 from data_ingestion import load_price_data
 from strategy import MLTradingStrategy
 from tax_analyzer import TaxAnalyzer
@@ -26,6 +26,7 @@ def run_once(
     p_short: float = 0.42,
     max_long_short: int = 10,
     trail_percent: float = 0.05,
+    min_edge=MIN_EDGE,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -84,6 +85,7 @@ def run_once(
         p_short=p_short,
         max_long_short=max_long_short,
         trail_percent=trail_percent,
+        min_edge=min_edge,
     )
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
     cerebro.addanalyzer(bt.analyzers.DrawDown,   _name="dd")
