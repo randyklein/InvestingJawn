@@ -20,7 +20,7 @@ ticker_sets = {
 
 # ─── param grid (universe included) ──────────────────────────────
 param_grid = {
-    "universe":        list(ticker_sets.keys()),  # <-- NEW dimension
+    "universe":        list(ticker_sets.keys()),  
     "p_long":          [0.60, 0.62, 0.64],
     "p_short":         [0.42],
     "max_long_short":  [4, 6],

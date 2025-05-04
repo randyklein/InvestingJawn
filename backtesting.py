@@ -29,6 +29,7 @@ def run_once(
     max_long_short: int = 10,
     trail_percent: float = 0.05,
     min_edge=MIN_EDGE,
+    trade_shorts: bool = True,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     tickers:    Optional[List[str]] = None,  
@@ -92,6 +93,7 @@ def run_once(
         max_long_short=max_long_short,
         trail_percent=trail_percent,
         min_edge=min_edge,
+        trade_shorts=trade_shorts,
     )
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
     cerebro.addanalyzer(bt.analyzers.DrawDown,   _name="dd")
