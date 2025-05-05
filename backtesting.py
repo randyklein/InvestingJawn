@@ -2,12 +2,18 @@
 
 Example quick slice
     from backtesting import run_once
-    res = run_once(start_date="2025-01-02", end_date="2025-03-31",
-                   p_long=0.58, p_short=0.42, max_long_short=10)
+    res = run_once(
+        start_date="2025-01-02", end_date="2025-03-31",
+        p_long=0.58, p_short=0.42, max_long_short=10,
+        trail_percent=0.05, min_edge=0.001, trade_shorts=False,
+        tickers=["AAPL","MSFT","GOOG"]
+    )
 """
 
+import argparse
+import inspect
 from datetime import datetime as _dt
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import backtrader as bt
 from logger_setup import get_logger
@@ -16,159 +22,143 @@ from config import INITIAL_CASH, MIN_EDGE
 from data_ingestion import load_price_data
 from strategy import MLTradingStrategy
 from tax_analyzer import TaxAnalyzer
-import argparse
-from typing import Optional, List
-
 
 log = get_logger(__name__)
 
 
 def run_once(
     *,
-    p_long: float = 0.58,
-    p_short: float = 0.42,
-    max_long_short: int = 10,
-    trail_percent: float = 0.05,
-    min_edge=MIN_EDGE,
-    trade_shorts: bool = True,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    tickers:    Optional[List[str]] = None,  
-
+    end_date:   Optional[str] = None,
+    tickers:    Optional[List[str]] = None,
+    # everything else is a hyperparam forwarded to the strategy:
+    **params: Any
 ) -> Dict[str, Any]:
-    """Run a single back-test with the given parameters."""
+    """
+    Run a single back-test.
 
-    # ─── gather hyperparams for dynamic logging ────────────────────
-    _sig = inspect.signature(run_once)
-    # use parameter names except those we override
-    _hp_names = [
-        p for p in _sig.parameters
-        if p not in ("start_date","end_date","tickers")
-    ]
-    # build dict of their current values
-    _hp = {name: locals()[name] for name in _hp_names}
+    - `start_date`/`end_date`: ISO dates for slicing.
+    - `tickers`: optional list to restrict universe.
+    - All other settings (p_long, p_short, min_edge, trade_shorts, etc.)
+      pass via `params` and are auto-logged & forwarded to the strategy.
+    """
 
-    cerebro = bt.Cerebro()
-    cerebro.broker.setcash(INITIAL_CASH)
-    cerebro.broker.setcommission(leverage=1.0)  # cash-only
-
-    cerebro.addanalyzer(TaxAnalyzer, _name="tax", rate=0.24)
-
-    #slippage
-    cerebro.broker.set_slippage_perc(perc=0.0002, slip_open=True, slip_match=True)
-    cerebro.broker.set_shortcash(False)
-
-    # forbid entering new shorts when cash is negative
-    cerebro.broker.set_shortcash(False)
-
-    # date window (naive dates)
+    # ─── Parse dates ────────────────────────────────────────────────
     fd = _dt.fromisoformat(start_date).date() if start_date else None
     td = _dt.fromisoformat(end_date).date()   if end_date   else None
 
-    # ─────────────────── add data feeds ────────────────────────────
-    price_data = load_price_data(tickers)   # pass None or your subset here
-    
-    for tkr, df in load_price_data().items():
-        # 1. drop timezone
+    # ─── Snapshot hyper-parameters for logging ─────────────────────
+    hp = params.copy()
+    hp_str = " ".join(f"{k}={v!r}" for k, v in hp.items())
+
+    # ─── Cerebro setup ─────────────────────────────────────────────
+    cerebro = bt.Cerebro()
+    cerebro.broker.setcash(INITIAL_CASH)
+    cerebro.broker.setcommission(leverage=1.0)
+
+    # Slippage (override via params["slip_perc"] if desired)
+    slip_perc = params.get("slip_perc", 0.0002)
+    cerebro.broker.set_slippage_perc(
+        perc=slip_perc, slip_open=True, slip_match=True
+    )
+
+    # Prevent shorting against negative cash
+    cerebro.broker.set_shortcash(False)
+
+    # Tax analyzer (override via params["tax_rate"])
+    tax_rate = params.get("tax_rate", 0.24)
+    cerebro.addanalyzer(TaxAnalyzer, _name="tax", rate=tax_rate)
+
+    # ─── Load & clean data ──────────────────────────────────────────
+    price_data = load_price_data(tickers)
+    for tkr, df in price_data.items():
         if getattr(df.index, "tz", None) is not None:
             df = df.tz_localize(None)
 
-        # 2. slice to window
         if fd or td:
             df = df.loc[fd:td]
 
-        # 3. basic hygiene: remove bad rows & dups
-        df = df.loc[df["Close"] >= 1.00]           # price floor every row
+        # Basic hygiene
+        df = df[df["Close"] >= 1.00]
         df = df[df["Volume"] > 0]
         df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
         df = df[~df.index.duplicated(keep="last")]
 
-
-        # 4. skip too-short feeds
-        if df.empty or len(df) < 30:
+        if df.empty or len(df) < params.get("min_bars", 30):
             continue
 
         cerebro.adddata(
             bt.feeds.PandasData(
-                dataname=df,
-                name=tkr,
-                fromdate=fd,
-                todate=td,
+                dataname=df, name=tkr, fromdate=fd, todate=td
             )
         )
 
-    # ─────────────────── strategy & analyzers ──────────────────────
-    cerebro.addstrategy(
-        MLTradingStrategy,
-        p_long=p_long,
-        p_short=p_short,
-        max_long_short=max_long_short,
-        trail_percent=trail_percent,
-        min_edge=min_edge,
-        trade_shorts=trade_shorts,
-    )
-    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
-    cerebro.addanalyzer(bt.analyzers.DrawDown,   _name="dd")
+    if not cerebro.datas:
+        log.warning("No data feeds for %s→%s; skipping.", fd, td)
+        return {
+            "start": fd, "end": td, "final": None, "sharpe": None,
+            "mdd": None, "trades": 0, "cagr": None,
+            "gross_pnl": None, "tax_paid": None, "net_after_tax": None
+        }
+
+    # ─── Strategy & analyzers ───────────────────────────────────────
+    cerebro.addstrategy(MLTradingStrategy, **params)
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio,  _name="sharpe")
+    cerebro.addanalyzer(bt.analyzers.DrawDown,      _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
-
-    if len(cerebro.datas) == 0:
-        log.warning("No feeds for %s → %s — skipped.", start_date, end_date)
-        return dict(start=fd, end=td, final=None, sharpe=None, mdd=None,
-                    trades=0, cagr=None, gross_pnl=None, tax_paid=None,
-                    net_after_tax=None)
-
 
     strat = cerebro.run()[0]
 
-    # ─────────────────── results ───────────────────────────────────
-    final   = cerebro.broker.getvalue()
-    sharpe  = strat.analyzers.sharpe.get_analysis().get("sharperatio")
-    mdd     = strat.analyzers.dd.get_analysis()["max"]["drawdown"]
-    tradesA = strat.analyzers.trades.get_analysis()
-    closed  = tradesA["total"]["closed"] if "total" in tradesA else 0
+    # ─── Metrics ────────────────────────────────────────────────────
+    final  = cerebro.broker.getvalue()
+    sharpe = strat.analyzers.sharpe.get_analysis().get("sharperatio")
+    mdd    = strat.analyzers.dd.get_analysis()["max"]["drawdown"]
+    trades = strat.analyzers.trades.get_analysis()["total"]["closed"]
 
-    # NEW — tax analyzer results
-    tax = strat.analyzers.tax.get_analysis()   # {'gross_pnl': …, 'tax_paid': …, 'net_after_tax': …}
-
-    # CAGR (only if window ≥ 30 days and equity positive)
+    tax = strat.analyzers.tax.get_analysis()
     window_days = (td - fd).days if fd and td else 0
-    if final > 0 and window_days >= 30:
-        years = window_days / 365.25
-        cagr  = (final / INITIAL_CASH) ** (1 / years) - 1
-    else:
-        cagr = None
+    cagr = (
+        (final / INITIAL_CASH) ** (1 / (window_days / 365.25)) - 1
+        if final > 0 and window_days >= 30 else None
+    )
 
-    results = dict(start=fd or "FULL", end=td or "FULL",final=final, sharpe=sharpe, mdd=mdd,
-                   trades=closed, cagr=cagr)
-    
-    results.update(tax)        # ← merge the three tax keys into results
+    results = {
+        "start": fd or "FULL",
+        "end":   td or "FULL",
+        "final": final,
+        "sharpe": sharpe,
+        "mdd":    mdd,
+        "trades": trades,
+        "cagr":   cagr,
+        **tax
+    }
 
-    # Compose a single formatted string of all hyperparams
-    hp_str = " ".join(f"{k}={v!r}" for k, v in _hp.items())
     log.info(
-        "Run [%s → %s] %s  →  "
-        "Final %.2f  CAGR %s  Sharpe %s  MaxDD %.2f%%  Trades %d",
+        "Run [%s→%s] %s → Final %.2f  CAGR %s  Sharpe %s  MaxDD %.2f%%  Trades %d",
         fd or "BEGIN", td or "END",
         hp_str,
         final,
-        f"{cagr:.2%}"        if cagr    is not None else "nan",
-        f"{sharpe:.3f}"      if sharpe  is not None else "nan",
+        f"{cagr:.2%}"   if cagr   is not None else "nan",
+        f"{sharpe:.3f}" if sharpe is not None else "nan",
         mdd,
-        closed,
+        trades,
     )
 
     return results
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="Run one backtest")
-    p.add_argument("--start",  help="YYYY-MM-DD")
-    p.add_argument("--end",    help="YYYY-MM-DD")
-    p.add_argument("--tickers",nargs="+",
-                   help="List of tickers to include (default=all)")
-    args = p.parse_args()
+    parser = argparse.ArgumentParser(description="Run one backtest")
+    parser.add_argument("--start",   help="YYYY-MM-DD")
+    parser.add_argument("--end",     help="YYYY-MM-DD")
+    parser.add_argument(
+        "--tickers", nargs="+",
+        help="Optional list of tickers (default = all)"
+    )
+    args = parser.parse_args()
+
     run_once(
-      start_date = args.start,
-      end_date   = args.end,
-      tickers    = args.tickers,
+        start_date=args.start,
+        end_date=args.end,
+        tickers=args.tickers
     )

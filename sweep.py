@@ -24,12 +24,12 @@ ticker_files = {
 
 # ---- grid to test -------------------------------------------------------
 param_grid = {
-    "p_long":          [0.60, 0.62, 0.64],
-    "p_short":         [0.42],
-    "max_long_short":  [4, 6],
-    "trail_percent":   [0.04],
-    "min_edge":        [0.001, 0.0015],
-    "trade_shorts":    [False],
+    "p_long":          [0.61, 0.62, 0.63],
+    "p_short":         [0.41, 0.42, 0.43],
+    "max_long_short":  [3, 4, 5],
+    "trail_percent":   [0.03, 0.04, 0.05],
+    "min_edge":        [0.001],                # fixed
+    "trade_shorts":    [False],                # long-only
 }
 
 WIN_START = "2023-01-03"
