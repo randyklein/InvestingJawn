@@ -69,6 +69,23 @@ def run_once(
         cerebro.adddata(
             bt.feeds.PandasData(dataname=df, name=tkr, fromdate=fd, todate=td)
         )
+    
+    #Feed coverage summary
+    coverage = [
+        (d._name,
+         d.datetime.date(0),
+         d.datetime.date(-1),
+         len(d))
+        for d in cerebro.datas
+    ]
+    if coverage:
+        log.info(
+            "Coverage sample: %s → %s  (%d bars) … (+%d more feeds)",
+            coverage[0][0],                              # ticker name
+            f"{coverage[0][1]}→{coverage[0][2]}",         # dates
+            coverage[0][3],                              # bar count
+            len(coverage)-1                              # remaining feeds
+        )
 
     if not cerebro.datas:
         log.warning("No data feeds for %s → %s; skipped.", fd, td)
@@ -86,6 +103,10 @@ def run_once(
     cerebro.addanalyzer(bt.analyzers.DrawDown,     _name="dd")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
+    # Trade recording
+    from utils.trade_recorder import TradeRecorder
+    cerebro.addanalyzer(TradeRecorder, _name="rec")
+
     strat = cerebro.run()[0]
 
     # ── metrics ─────────────────────────────────────────────────────
@@ -94,6 +115,16 @@ def run_once(
     mdd    = strat.analyzers.dd.get_analysis()["max"]["drawdown"]
     trades = strat.analyzers.trades.get_analysis().get("total", {}).get("closed", 0)
     tax    = strat.analyzers.tax.get_analysis()
+    trade_log = strat.analyzers.rec.get_analysis()["trades"]
+
+    # write once per run
+    if trade_log:
+        import uuid, pathlib, pandas as pd
+        out = pathlib.Path("logs")
+        out.mkdir(exist_ok=True)
+        csv_path = out / f"trades_{uuid.uuid4().hex[:8]}.csv"
+        pd.DataFrame(trade_log).to_csv(csv_path, index=False)
+        log.info("Trade log written ➜ %s  (%d rows)", csv_path, len(trade_log))
 
     if fd is not None and td is not None and final > 0 and (td - fd).days >= 30:
         years = (td - fd).days / 365.25
